@@ -1,0 +1,108 @@
+buildscript {
+    ext.ios_framework_name = 'KIntroModels'
+    ext.serialization_version = "0.11.0"
+    ext.kotlin_version = '1.3.40'
+    ext.kotlinx_version = '1.3.40'
+
+}
+
+plugins {
+    id 'kotlin-multiplatform' version '1.3.40'
+    id 'kotlinx-serialization' version '1.3.40' // Make sure we update ios
+}
+
+repositories {
+    mavenCentral()
+    jcenter()
+    maven { url "https://kotlin.bintray.com/kotlinx" }
+}
+
+group 'com.jacob.rakidzich'
+version '0.0.1'
+
+apply plugin: 'maven-publish'
+
+kotlin {
+//    jvm()
+
+    targets {
+        fromPreset(presets.jvm, 'jvm')
+
+        fromPreset(presets.iosX64, 'ios') {
+            binaries {
+                framework("$ios_framework_name") {
+                    embedBitcode('disable')
+                }
+            }
+        }
+    }
+
+    sourceSets {
+        commonMain {
+            dependencies {
+                implementation kotlin('stdlib-common')
+                implementation "org.jetbrains.kotlinx:kotlinx-serialization-runtime-common:$serialization_version"
+
+            }
+        }
+        commonTest {
+            dependencies {
+                implementation kotlin('test-common')
+                implementation kotlin('test-annotations-common')
+            }
+        }
+        jvmMain {
+            dependencies {
+                implementation kotlin('stdlib')
+                implementation "org.jetbrains.kotlinx:kotlinx-serialization-runtime:$serialization_version"
+
+            }
+        }
+        jvmTest {
+            dependencies {
+                implementation kotlin('test')
+                implementation kotlin('test-junit')
+            }
+        }
+        iosMain {
+            dependencies {
+                implementation "org.jetbrains.kotlinx:kotlinx-serialization-runtime-native:0.11.1"// $serialization_version"
+            }
+
+        }
+        iosTest {
+        }
+    }
+}
+
+
+task packForXCode {
+    final File frameworkDir = new File(rootDir, "xcode-frameworks")
+    final String buildType = project.findProperty("XCODE_CONFIGURATION")?.toUpperCase() ?: 'DEBUG'
+
+    def keyFrameworkPrefix = "$ios_framework_name${buildType.toLowerCase().capitalize()}"
+    dependsOn "link${keyFrameworkPrefix}FrameworkIos"
+
+    doLast {
+        def srcFile = kotlin.targets.ios.binaries.getFramework("$ios_framework_name", buildType).outputFile
+
+        copy {
+            from srcFile.parent
+            into frameworkDir
+        }
+
+        new File(frameworkDir, 'gradlew').with {
+            text = "#!/bin/bash\nexport 'JAVA_HOME=${System.getProperty("java.home")}'\ncd '${rootProject.rootDir}'\n./gradlew \$@\n"
+            setExecutable(true)
+        }
+    }
+}
+
+
+tasks.build.dependsOn packForXCode
+
+
+configurations {
+    compileClasspath
+}
+
